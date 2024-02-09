@@ -1,51 +1,38 @@
 #include <Arduino.h>
 #include <FastLED.h>
 
+// LED settings
 #define LED_PIN 7
 #define NUM_LEDS 60
 #define NUM_SEATS 3
-
-void resetLeds(CRGB flashColor);
-void toggleSetupMode();
-void setToggleState(int number, bool value);
-void resetToggleStates();
-void buttonHandler(int index);
-
-static unsigned long buttonPressTime[NUM_SEATS];
-static bool buttonPressed[NUM_SEATS] = {false};
-static bool buttonLongPressTriggered[NUM_SEATS] = {false};
-
-unsigned long debounceDelay = 50;
-const unsigned long longPressTime = 1000;
-bool setupMode = false;
-
-const int buttonPins[NUM_SEATS] = {2, 3, 4};
-
-const int buttonPin1 = 2;
-// bool button1State = false;
-
-const int buttonPin2 = 3;
-bool button2State = false;
-
-const int buttonPin3 = 4;
-bool button3State = false;
-
-bool toggleStates[NUM_SEATS] = {false, false, false};
-
 CRGB leds[NUM_LEDS];
 CRGB* seats[NUM_SEATS] = {&leds[0], &leds[4], &leds[8]};
-CRGB* seat1 = &leds[0];
-CRGB* seat2 = &leds[4];
-CRGB* seat3 = &leds[8];
 CRGB colorGreen;
 CRGB colorYellow;
 CRGB colorRed;
 CRGB colorBlack;
 CRGB colorBlue;
 
+// Button settings
+const int buttonPins[NUM_SEATS] = {2, 3, 4};
+#define LONG_PRESS_TIME 1000
+static unsigned long buttonPressTime[NUM_SEATS];
+static bool buttonPressed[NUM_SEATS] = {false};
+static bool buttonLongPressTriggered[NUM_SEATS] = {false};
+
+// State variables
+bool toggleStates[NUM_SEATS] = {false, false, false};
+bool setupMode = false;
+
+// Function prototypes
+void resetLeds(CRGB flashColor);
+void toggleSetupMode();
+void setToggleState(int number, bool value);
+void resetToggleStates();
+void buttonHandler(int index);
+
 void setup() {
   Serial.begin(9600);
-  pinMode(buttonPin1, INPUT);
 
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(10);
@@ -121,8 +108,8 @@ void buttonHandler (int index) {
       buttonLongPressTriggered[index] = false;
     } else {
       unsigned long pressDuration = millis() - buttonPressTime[index];
-      if (pressDuration >= longPressTime && !buttonLongPressTriggered[index]) {
-        // Button has been held down for longPressTime
+      if (pressDuration >= LONG_PRESS_TIME && !buttonLongPressTriggered[index]) {
+        // Button has been held down for LONG_PRESS_TIME
         toggleSetupMode();
         buttonLongPressTriggered[index] = true;
       }
