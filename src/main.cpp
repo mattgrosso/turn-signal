@@ -9,10 +9,17 @@ void resetLeds(CRGB flashColor);
 void toggleSetupMode();
 void setToggleState(int number, bool value);
 void resetToggleStates();
+void buttonHandler(int index);
+
+static unsigned long buttonPressTime[NUM_SEATS];
+static bool buttonPressed[NUM_SEATS] = {false};
+static bool buttonLongPressTriggered[NUM_SEATS] = {false};
 
 unsigned long debounceDelay = 50;
 const unsigned long longPressTime = 1000;
 bool setupMode = false;
+
+const int buttonPins[NUM_SEATS] = {2, 3, 4};
 
 const int buttonPin1 = 2;
 // bool button1State = false;
@@ -26,10 +33,10 @@ bool button3State = false;
 bool toggleStates[NUM_SEATS] = {false, false, false};
 
 CRGB leds[NUM_LEDS];
+CRGB* seats[NUM_SEATS] = {&leds[0], &leds[4], &leds[8]};
 CRGB* seat1 = &leds[0];
 CRGB* seat2 = &leds[4];
 CRGB* seat3 = &leds[8];
-CRGB* seat4 = &leds[12];
 CRGB colorGreen;
 CRGB colorYellow;
 CRGB colorRed;
@@ -53,111 +60,9 @@ void setup() {
 }
 
 void loop() {
-  // Seat 1 button
-  static unsigned long button1PressTime;
-  static bool button1Pressed = false;
-  static bool button1LongPressTriggered = false;
-  int button1State = digitalRead(buttonPin1);
-
-  if (button1State == HIGH) {
-    if (!button1Pressed) {
-      button1PressTime = millis();
-      button1Pressed = true;
-      button1LongPressTriggered = false;
-    } else {
-      unsigned long pressDuration = millis() - button1PressTime;
-      if (pressDuration >= longPressTime && !button1LongPressTriggered) {
-        // Button has been held down for longPressTime
-        toggleSetupMode();
-        button1LongPressTriggered = true;
-      }
-    }
-  } else if (button1State == LOW && button1Pressed) {
-    if (!button1LongPressTriggered) {
-      // Short press
-      if (*seat1 != colorGreen) {
-        *seat1 = colorGreen;
-        setToggleState(1, true);
-      } else {
-        *seat1 = colorBlack;
-        setToggleState(1, false);
-      }
-      FastLED.show();
-    }
-    button1Pressed = false;
-  }
-
-
-  
-  // Seat 2 button
-  static unsigned long button2PressTime;
-  static bool button2Pressed = false;
-  static bool button2LongPressTriggered = false;
-  int button2State = digitalRead(buttonPin2);
-
-  if (button2State == HIGH) {
-    if (!button2Pressed) {
-      button2PressTime = millis();
-      button2Pressed = true;
-      button2LongPressTriggered = false;
-    } else {
-      unsigned long pressDuration = millis() - button2PressTime;
-      if (pressDuration >= longPressTime && !button2LongPressTriggered) {
-        // Button has been held down for longPressTime
-        toggleSetupMode();
-        button2LongPressTriggered = true;
-      }
-    }
-  } else if (button2State == LOW && button2Pressed) {
-    if (!button2LongPressTriggered) {
-      // Short press
-      if (*seat2 != colorGreen) {
-        *seat2 = colorGreen;
-        setToggleState(2, true);
-      } else {
-        *seat2 = colorBlack;
-        setToggleState(2, false);
-      }
-      FastLED.show();
-    }
-    button2Pressed = false;
-  }
-
-
-
-  // Seat 3 button
-  static unsigned long button3PressTime;
-  static bool button3Pressed = false;
-  static bool button3LongPressTriggered = false;
-  int button3State = digitalRead(buttonPin3);
-
-  if (button3State == HIGH) {
-    if (!button3Pressed) {
-      button3PressTime = millis();
-      button3Pressed = true;
-      button3LongPressTriggered = false;
-    } else {
-      unsigned long pressDuration = millis() - button3PressTime;
-      if (pressDuration >= longPressTime && !button3LongPressTriggered) {
-        // Button has been held down for longPressTime
-        toggleSetupMode();
-        button3LongPressTriggered = true;
-      }
-    }
-  } else if (button3State == LOW && button3Pressed) {
-    if (!button3LongPressTriggered) {
-      // Short press
-      if (*seat3 != colorGreen) {
-        *seat3 = colorGreen;
-        setToggleState(3, true);
-      } else {
-        *seat3 = colorBlack;
-        setToggleState(3, false);
-      }
-      FastLED.show();
-    }
-    button3Pressed = false;
-  }  
+  buttonHandler(0);
+  buttonHandler(1);
+  buttonHandler(2);
 }
 
 void resetLeds(CRGB flashColor) {
@@ -207,31 +112,24 @@ void resetToggleStates() {
 }
 
 void buttonHandler (int index) {
-  static unsigned long buttonPressTime;
-  static bool buttonPressed = false;
-  static bool buttonLongPressTriggered = false;
   int buttonState = digitalRead(buttonPins[index]);
 
   if (buttonState == HIGH) {
-    Serial.println("buttonState == HIGH");
-    if (!buttonPressed) {
-      Serial.println("!buttonPressed");
-      buttonPressTime = millis();
-      buttonPressed = true;
-      buttonLongPressTriggered = false;
+    if (!buttonPressed[index]) {
+      buttonPressTime[index] = millis();
+      buttonPressed[index] = true;
+      buttonLongPressTriggered[index] = false;
     } else {
-      Serial.println("buttonPressed");
-      unsigned long pressDuration = millis() - buttonPressTime;
-      if (pressDuration >= longPressTime && !buttonLongPressTriggered) {
+      unsigned long pressDuration = millis() - buttonPressTime[index];
+      if (pressDuration >= longPressTime && !buttonLongPressTriggered[index]) {
         // Button has been held down for longPressTime
-        Serial.println("longPressTime");
         toggleSetupMode();
-        buttonLongPressTriggered = true;
+        buttonLongPressTriggered[index] = true;
       }
     }
-  } else if (buttonState == LOW && buttonPressed) {
+  } else if (buttonState == LOW && buttonPressed[index]) {
     Serial.println("buttonState == LOW");
-    if (!buttonLongPressTriggered) {
+    if (!buttonLongPressTriggered[index]) {
       Serial.println("!buttonLongPressTriggered");
       // Short press
       if (*seats[index] != colorGreen) {
@@ -243,6 +141,6 @@ void buttonHandler (int index) {
       }
       FastLED.show();
     }
-    buttonPressed = false;
+    buttonPressed[index] = false;
   }
 }
