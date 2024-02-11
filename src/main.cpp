@@ -5,8 +5,12 @@
 #define LED_PIN 7
 #define NUM_LEDS 60
 #define NUM_SEATS 3
+#define seat1 0
+#define seat2 10
+#define seat3 20
+int seatIndices[NUM_SEATS] = {seat1, seat2, seat3};
 CRGB leds[NUM_LEDS];
-CRGB* seats[NUM_SEATS] = {&leds[0], &leds[4], &leds[8]};
+CRGB* seatLEDs[NUM_SEATS] = {&leds[seat1], &leds[seat2], &leds[seat3]};
 CRGB colorGreen;
 CRGB colorYellow;
 CRGB colorRed;
@@ -21,21 +25,24 @@ static bool buttonPressed[NUM_SEATS] = {false};
 static bool buttonLongPressTriggered[NUM_SEATS] = {false};
 
 // State variables
-bool toggleStates[NUM_SEATS] = {false, false, false};
+bool occupiedSeats[NUM_SEATS] = {false, false, false};
 bool setupMode = false;
+int currentPlayer;
 
 // Function prototypes
 void resetLeds(CRGB flashColor);
 void toggleSetupMode();
-void setToggleState(int number, bool value);
-void resetToggleStates();
+void setOccupiedSeat(int number, bool value);
+void resetOccupiedSeats();
 void buttonHandler(int index);
+void chooseStartPlayer();
+void goToNextPlayer ();
 
 void setup() {
   Serial.begin(9600);
 
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-  FastLED.setBrightness(10);
+  FastLED.setBrightness(30);
   colorGreen = CRGB::Green;
   colorYellow = CRGB::Yellow;
   colorRed = CRGB::Red;
@@ -43,7 +50,7 @@ void setup() {
   colorBlue = CRGB::Blue;
 
   resetLeds(colorBlack);
-  resetToggleStates();
+  resetOccupiedSeats();
 }
 
 void loop() {
@@ -78,23 +85,24 @@ void toggleSetupMode() {
   setupMode = !setupMode;
 
   if (setupMode) {
-    resetToggleStates();
+    resetOccupiedSeats();
     for (int i = 0; i < NUM_LEDS; i++) {
       leds[i] = colorBlue;
     }
     FastLED.show();
   } else {
     resetLeds(colorGreen);
+    chooseStartPlayer();
   }
 }
 
-void setToggleState(int number, bool value) {
-  toggleStates[number - 1] = value;
+void setOccupiedSeat(int index, bool value) {
+  occupiedSeats[index] = value;
 }
 
-void resetToggleStates() {
+void resetOccupiedSeats() {
   for (int i = 0; i < NUM_SEATS; i++) {
-    toggleStates[i] = false;
+    occupiedSeats[i] = false;
   }
 }
 
@@ -109,25 +117,100 @@ void buttonHandler (int index) {
     } else {
       unsigned long pressDuration = millis() - buttonPressTime[index];
       if (pressDuration >= LONG_PRESS_TIME && !buttonLongPressTriggered[index]) {
-        // Button has been held down for LONG_PRESS_TIME
+        Serial.println("Long press detected");
         toggleSetupMode();
         buttonLongPressTriggered[index] = true;
       }
     }
   } else if (buttonState == LOW && buttonPressed[index]) {
-    Serial.println("buttonState == LOW");
     if (!buttonLongPressTriggered[index]) {
-      Serial.println("!buttonLongPressTriggered");
-      // Short press
-      if (*seats[index] != colorGreen) {
-        *seats[index] = colorGreen;
-        setToggleState(index, true);
+      Serial.println("Short press detected");
+      if (setupMode) {
+        if (!occupiedSeats[index]) {
+          setOccupiedSeat(index, true);
+          *seatLEDs[index] = colorGreen;
+          FastLED.show();
+        } else {
+          setOccupiedSeat(index, false);
+          *seatLEDs[index] = colorBlue;
+          FastLED.show();
+        }
       } else {
-        *seats[index] = colorBlack;
-        setToggleState(index, false);
+        // Normal mode
+        if (index == currentPlayer) {
+          goToNextPlayer();
+        } else {
+          Serial.println("It's not your turn!");
+        }
       }
-      FastLED.show();
     }
     buttonPressed[index] = false;
   }
+}
+
+void chooseStartPlayer () {
+  int trueIndices[NUM_SEATS];
+  int numTrue = 0;
+
+  for (int i = 0; i < NUM_SEATS; i++) {
+    if (occupiedSeats[i]) {
+      trueIndices[numTrue] = i;
+      numTrue++;
+    }
+  }
+
+  // If no true values were found, return -1
+  if (numTrue == 0) {
+    currentPlayer = -1;
+  }
+
+  // Choose a random index from the trueIndices array
+  int randomIndex = random(numTrue);
+  currentPlayer = trueIndices[randomIndex];
+
+  *seatLEDs[currentPlayer] = colorGreen;
+  FastLED.show();
+}
+
+void goToNextPlayer () {
+  Serial.println("Going to next player");
+  
+  int previousPlayer = currentPlayer;
+
+  int loopCounter = 0;
+  do {
+    currentPlayer = (previousPlayer + 1) % NUM_SEATS;
+    loopCounter++;
+  } while (!occupiedSeats[currentPlayer] && loopCounter < NUM_SEATS);
+
+  if (loopCounter == NUM_SEATS) {
+    Serial.println("No players found");
+  }
+
+  int startIndex = seatIndices[previousPlayer];
+  int endIndex = seatIndices[currentPlayer];
+
+  // If the end index is less than the start index, it means we've wrapped around to the start of the strip
+  if (endIndex < startIndex) {
+    endIndex += NUM_LEDS;
+  }
+
+  // Create the chasing light effect
+  for (int i = startIndex; i < endIndex; i++) {
+    // Turn on the LED at the current index
+    leds[i % NUM_LEDS] = colorYellow;
+
+    // Update the LED strip
+    FastLED.show();
+
+    // Turn off the LED at the current index
+    leds[i % NUM_LEDS] = colorBlack;
+
+    // Delay to slow down the effect
+    delay(25);
+  }
+
+  // Make sure the LED at the current player's seat is left on
+  *seatLEDs[currentPlayer] = colorGreen;
+  FastLED.show();
 }
