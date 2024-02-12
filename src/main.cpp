@@ -30,6 +30,7 @@ bool setupMode = false;
 int currentPlayer;
 
 // Function prototypes
+void printBoolArray(bool array[], int size);
 void resetLeds(CRGB flashColor);
 void toggleSetupMode();
 void setOccupiedSeat(int number, bool value);
@@ -177,14 +178,14 @@ void goToNextPlayer () {
   
   int previousPlayer = currentPlayer;
 
-  int loopCounter = 0;
-  do {
-    currentPlayer = (previousPlayer + 1) % NUM_SEATS;
-    loopCounter++;
-  } while (!occupiedSeats[currentPlayer] && loopCounter < NUM_SEATS);
-
-  if (loopCounter == NUM_SEATS) {
-    Serial.println("No players found");
+  int loopPlayer = previousPlayer;
+  for (int i = 0; i < NUM_SEATS; i++) {
+    int nextPlayer = (loopPlayer + 1) % NUM_SEATS;
+    if (occupiedSeats[nextPlayer]) {
+      currentPlayer = nextPlayer;
+      break;
+    }
+    loopPlayer = nextPlayer;
   }
 
   int startIndex = seatIndices[previousPlayer];
@@ -213,4 +214,13 @@ void goToNextPlayer () {
   // Make sure the LED at the current player's seat is left on
   *seatLEDs[currentPlayer] = colorGreen;
   FastLED.show();
+}
+
+void printBoolArray(bool array[], int size) {
+  for (int i = 0; i < size; i++) {
+    Serial.print("Value at index ");
+    Serial.print(i);
+    Serial.print(": ");
+    Serial.println(array[i]);
+  }
 }
