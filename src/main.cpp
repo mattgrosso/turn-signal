@@ -37,6 +37,7 @@ void setOccupiedSeat(int number, bool value);
 void resetOccupiedSeats();
 void buttonHandler(int index);
 void chooseStartPlayer();
+void trainEffect(int restIndex);
 void goToNextPlayer ();
 
 void setup() {
@@ -169,9 +170,53 @@ void chooseStartPlayer () {
   int randomIndex = random(numTrue);
   currentPlayer = trueIndices[randomIndex];
 
-  *seatLEDs[currentPlayer] = colorGreen;
+  // *seatLEDs[currentPlayer] = colorGreen;
+  trainEffect(seatIndices[currentPlayer]);
   FastLED.show();
 }
+
+void trainEffect(int restIndex) {
+  const int TRAIN_LENGTH = 3; // Length of the light train
+  const int MIN_LAPS = 3; // Minimum number of laps
+  const int MAX_LAPS = 6; // Maximum number of laps
+  const int START_DELAY = 5; // Starting delay in milliseconds
+  const int END_DELAY = 25; // Ending delay in milliseconds
+
+  // Calculate the total number of steps
+  int totalSteps = random(MIN_LAPS, MAX_LAPS + 1) * NUM_LEDS;
+
+  // Calculate the rest position in steps
+  int restPosition = totalSteps + restIndex - TRAIN_LENGTH;
+
+  // Loop over each step
+  for (int i = 0; i <= restPosition; i++) {
+    // Calculate the current delay
+    int currentDelay = map(i, 0, restPosition, START_DELAY, END_DELAY);
+
+    // Turn off all LEDs
+    fill_solid(leds, NUM_LEDS, colorBlack);
+
+    // Turn on the LEDs in the train
+    for (int j = 0; j < TRAIN_LENGTH; j++) {
+      if (i - j >= 0) {
+        leds[(i - j) % NUM_LEDS] = colorYellow;
+      }
+    }
+
+    // Update the LED strip
+    FastLED.show();
+    delay(currentDelay);
+  }
+
+  // Turn off all LEDs
+  fill_solid(leds, NUM_LEDS, colorBlack);
+  FastLED.show();
+
+  // Turn on the LED at the rest position
+  leds[restIndex] = colorGreen;
+  FastLED.show();
+}
+
 
 void goToNextPlayer () {
   Serial.println("Going to next player");
