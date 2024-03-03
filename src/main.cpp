@@ -42,6 +42,7 @@ void resetOccupiedSeats();
 void buttonHandler(int index);
 void chooseStartPlayer();
 void singleLightEffect(int restIndex);
+void allLightsOffEffect(int restIndex);
 void goToNextPlayer ();
 
 void setup() {
@@ -115,7 +116,7 @@ void toggleSetupMode() {
   } else if (!moreThanOneSeatOccupied) {
     resetLeds(colorRed);
   } else {
-    resetLeds(colorGreen);
+    // resetLeds(colorGreen);
 
     chooseStartPlayer();
   }
@@ -194,7 +195,13 @@ void chooseStartPlayer () {
   int randomIndex = random(numTrue);
   currentPlayer = trueIndices[randomIndex];
 
-  singleLightEffect(seatIndices[currentPlayer]);
+  int randomChoice = random(0, 2); // Generate a random number (0 or 1)
+
+  if (randomChoice == 0) {
+    singleLightEffect(seatIndices[currentPlayer]);
+  } else {
+    allLightsOffEffect(seatIndices[currentPlayer]);
+  }
   FastLED.show();
 }
 
@@ -243,6 +250,55 @@ void singleLightEffect(int restIndex) {
 
   // Update the LED strip
   FastLED.show();
+}
+
+void allLightsOffEffect(int restIndex) {
+  const int START_DELAY = 1; // Starting delay in milliseconds
+  const int END_DELAY = 15; // Ending delay in milliseconds
+  const int SKIP_INDEX = 21; // Index to skip to
+  const int START_INDEX = 200; // Starting index
+
+  // Turn on all LEDs from 21 to 200
+  for (int i = SKIP_INDEX; i <= START_INDEX; i++) {
+    if (i < NUM_LEDS) {
+      leds[i] = colorGreen;
+    }
+  }
+
+  // Update the LED strip
+  FastLED.show();
+
+  // Create an array of LED indices
+  int ledIndices[START_INDEX - SKIP_INDEX + 1];
+  int count = 0;
+  for (int i = SKIP_INDEX; i <= START_INDEX; i++) {
+    if (i != restIndex) {
+      ledIndices[count++] = i;
+    }
+  }
+
+  // Shuffle the LED indices
+  for (int i = 0; i < count; i++) {
+    int randomIndex = random(0, count);
+    int temp = ledIndices[i];
+    ledIndices[i] = ledIndices[randomIndex];
+    ledIndices[randomIndex] = temp;
+  }
+
+  // Loop over each LED index
+  for (int i = 0; i < count; i++) {
+    // Calculate the current delay
+    int currentDelay = map(i, 0, count, START_DELAY, END_DELAY);
+
+    // Turn off the LED at the current index
+    leds[ledIndices[i]] = colorBlack;
+
+    // Update the LED strip
+    FastLED.show();
+
+    // Delay for the current delay
+    delay(currentDelay);
+  }
 }
 
 void goToNextPlayer () {
