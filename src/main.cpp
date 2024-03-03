@@ -35,14 +35,13 @@ bool setupMode = false;
 int currentPlayer;
 
 // Function prototypes
-void printBoolArray(bool array[], int size);
 void resetLeds(CRGB flashColor);
 void toggleSetupMode();
 void setOccupiedSeat(int number, bool value);
 void resetOccupiedSeats();
 void buttonHandler(int index);
 void chooseStartPlayer();
-void trainEffect(int restIndex);
+void singleLightEffect(int restIndex);
 void goToNextPlayer ();
 
 void setup() {
@@ -72,7 +71,7 @@ void loop() {
 
 void resetLeds(CRGB flashColor) {
   for (int i = 0; i < 2; i++) {
-    for (int i = 0; i < NUM_LEDS; i++) {
+    for (int i = 21; i < NUM_LEDS; i++) {
       leds[i] = flashColor;
     }
 
@@ -80,7 +79,7 @@ void resetLeds(CRGB flashColor) {
 
     delay(250);
 
-    for (int i = 0; i < NUM_LEDS; i++) {
+    for (int i = 21; i < NUM_LEDS; i++) {
       leds[i] = colorBlack;
     }
 
@@ -95,12 +94,26 @@ void resetLeds(CRGB flashColor) {
 void toggleSetupMode() {
   setupMode = !setupMode;
 
+  bool moreThanOneSeatOccupied = false;
+  int occupiedCount = 0;
+  for (size_t i = 0; i < sizeof(occupiedSeats)/sizeof(occupiedSeats[0]); i++) {
+    if (occupiedSeats[i]) {
+      occupiedCount++;
+      if (occupiedCount > 1) {
+        moreThanOneSeatOccupied = true;
+        break;
+      }
+    }
+  }
+
   if (setupMode) {
     resetOccupiedSeats();
-    for (int i = 0; i < NUM_LEDS; i++) {
+    for (int i = 21; i < NUM_LEDS; i++) {
       leds[i] = colorBlue;
     }
     FastLED.show();
+  } else if (!moreThanOneSeatOccupied) {
+    resetLeds(colorRed);
   } else {
     resetLeds(colorGreen);
 
@@ -130,8 +143,6 @@ void buttonHandler (int index) {
       unsigned long pressDuration = millis() - buttonPressTime[index];
       if (pressDuration >= LONG_PRESS_TIME && !buttonLongPressTriggered[index]) {
         Serial.println("Long press detected");
-        Serial.print("Button ");
-        Serial.print(index + 1);
         toggleSetupMode();
         buttonLongPressTriggered[index] = true;
       }
@@ -139,8 +150,6 @@ void buttonHandler (int index) {
   } else if (buttonState == LOW && buttonPressed[index]) {
     if (!buttonLongPressTriggered[index]) {
       Serial.println("Short press detected");
-      Serial.print("Button ");
-      Serial.print(index + 1);
       if (setupMode) {
         if (!occupiedSeats[index]) {
           setOccupiedSeat(index, true);
@@ -185,61 +194,63 @@ void chooseStartPlayer () {
   int randomIndex = random(numTrue);
   currentPlayer = trueIndices[randomIndex];
 
-  trainEffect(seatIndices[currentPlayer]);
+  singleLightEffect(seatIndices[currentPlayer]);
   FastLED.show();
 }
 
-void trainEffect(int restIndex) {
-  const int TRAIN_LENGTH = 3; // Length of the light train
+void singleLightEffect(int restIndex) {
   const int MIN_LAPS = 3; // Minimum number of laps
   const int MAX_LAPS = 6; // Maximum number of laps
-  const int START_DELAY = 5; // Starting delay in milliseconds
-  const int END_DELAY = 25; // Ending delay in milliseconds
+  const int START_DELAY = 1; // Starting delay in milliseconds
+  const int END_DELAY = 15; // Ending delay in milliseconds
+  const int SKIP_INDEX = 21; // Index to skip to
+  const int START_INDEX = 200; // Starting index
+  const int HIDDEN_LEDS = 20; // Number of hidden LEDs
 
   // Calculate the total number of steps
-  int totalSteps = random(MIN_LAPS, MAX_LAPS + 1) * NUM_LEDS;
-
-  // Calculate the rest position in steps
-  int restPosition = totalSteps - restIndex - TRAIN_LENGTH;
+  int totalLaps = random(MIN_LAPS, MAX_LAPS + 1);
+  int totalSteps = totalLaps * (NUM_LEDS - HIDDEN_LEDS) + (START_INDEX - restIndex);
 
   // Loop over each step
-  for (int i = 0; i <= restPosition; i++) {
+  for (int i = 0; i < totalSteps; i++) {
     // Calculate the current delay
-    int currentDelay = map(i, 0, restPosition, START_DELAY, END_DELAY);
+    int currentDelay = map(i, 0, totalSteps, START_DELAY, END_DELAY);
 
     // Turn off all LEDs
     fill_solid(leds, NUM_LEDS, colorBlack);
 
-    // Turn on the LEDs in the train
-    for (int j = 0; j < TRAIN_LENGTH; j++) {
-      if (i - j >= 0) {
-        leds[(NUM_LEDS - (i - j) % NUM_LEDS) - 1] = colorYellow; // Change here for reverse direction
-      }
+    // Calculate the LED index
+    int ledIndex = START_INDEX - (i % (NUM_LEDS - HIDDEN_LEDS));
+    if (ledIndex < SKIP_INDEX) {
+      ledIndex += (NUM_LEDS - SKIP_INDEX);
     }
+
+    // Turn on the LED at the calculated index
+    leds[ledIndex] = colorGreen;
 
     // Update the LED strip
     FastLED.show();
+
+    // Delay for the current delay
     delay(currentDelay);
   }
 
   // Turn off all LEDs
   fill_solid(leds, NUM_LEDS, colorBlack);
-  FastLED.show();
 
   // Turn on the LED at the rest position
   leds[restIndex] = colorGreen;
+
+  // Update the LED strip
   FastLED.show();
 }
 
-
 void goToNextPlayer () {
-  Serial.println("Going to next player");
-  
   int previousPlayer = currentPlayer;
 
   int loopPlayer = previousPlayer;
   for (int i = 0; i < NUM_SEATS; i++) {
-    int nextPlayer = (loopPlayer - 1 + NUM_SEATS) % NUM_SEATS; // Change here for reverse direction
+    int nextPlayer = (loopPlayer - 1 + NUM_SEATS) % NUM_SEATS;
     if (occupiedSeats[nextPlayer]) {
       currentPlayer = nextPlayer;
       break;
@@ -258,28 +269,23 @@ void goToNextPlayer () {
   // Create the chasing light effect
   for (int i = startIndex; i > endIndex; i--) { // Change here for reverse direction
     // Turn on the LED at the current index
-    leds[i % NUM_LEDS] = colorGreen;
+    if (i % NUM_LEDS >= 21) {
+      leds[i % NUM_LEDS] = colorGreen;
 
-    // Update the LED strip
-    FastLED.show();
+      // Update the LED strip
+      FastLED.show();
 
-    // Turn off the LED at the current index
-    leds[i % NUM_LEDS] = colorBlack;
+      // Turn off the LED at the current index
+      leds[i % NUM_LEDS] = colorBlack;
+      delay(10);
+    }
 
     // Delay to slow down the effect
-    delay(10);
   }
 
   // Make sure the LED at the current player's seat is left on
-  *seatLEDs[currentPlayer] = colorGreen;
-  FastLED.show();
-}
-
-void printBoolArray(bool array[], int size) {
-  for (int i = 0; i < size; i++) {
-    Serial.print("Value at index ");
-    Serial.print(i);
-    Serial.print(": ");
-    Serial.println(array[i]);
+  if (currentPlayer >= 21) {
+    *seatLEDs[currentPlayer] = colorGreen;
+    FastLED.show();
   }
 }
