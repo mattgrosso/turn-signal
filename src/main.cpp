@@ -2,15 +2,20 @@
 #include <FastLED.h>
 
 // LED settings
-#define LED_PIN 7
-#define NUM_LEDS 60
-#define NUM_SEATS 3
-#define seat1 0
-#define seat2 10
-#define seat3 20
-int seatIndices[NUM_SEATS] = {seat1, seat2, seat3};
+#define LED_PIN 2
+#define NUM_LEDS 200
+#define NUM_SEATS 8
+#define seat1 30
+#define seat2 52
+#define seat3 75
+#define seat4 96
+#define seat5 119
+#define seat6 142
+#define seat7 164
+#define seat8 187
+int seatIndices[NUM_SEATS] = {seat1, seat2, seat3, seat4, seat5, seat6, seat7, seat8};
 CRGB leds[NUM_LEDS];
-CRGB* seatLEDs[NUM_SEATS] = {&leds[seat1], &leds[seat2], &leds[seat3]};
+CRGB* seatLEDs[NUM_SEATS] = {&leds[seat1], &leds[seat2], &leds[seat3], &leds[seat4], &leds[seat5], &leds[seat6], &leds[seat7], &leds[seat8]};
 CRGB colorGreen;
 CRGB colorYellow;
 CRGB colorRed;
@@ -18,14 +23,14 @@ CRGB colorBlack;
 CRGB colorBlue;
 
 // Button settings
-const int buttonPins[NUM_SEATS] = {2, 3, 4};
+const int buttonPins[NUM_SEATS] = {3, 4, 5, 6, 7, 8, 9, 10};
 #define LONG_PRESS_TIME 1000
 static unsigned long buttonPressTime[NUM_SEATS];
 static bool buttonPressed[NUM_SEATS] = {false};
 static bool buttonLongPressTriggered[NUM_SEATS] = {false};
 
 // State variables
-bool occupiedSeats[NUM_SEATS] = {false, false, false};
+bool occupiedSeats[NUM_SEATS] = {false, false, false, false, false, false, false, false};
 bool setupMode = false;
 int currentPlayer;
 
@@ -44,12 +49,11 @@ void setup() {
   Serial.begin(9600);
 
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-  FastLED.setBrightness(30);
   colorGreen = CRGB::Green;
   colorYellow = CRGB::Yellow;
   colorRed = CRGB::Red;
   colorBlack = CRGB::Black;
-  colorBlue = CRGB::Blue;
+  colorBlue = CHSV(170, 255, 128);
 
   resetLeds(colorBlack);
   resetOccupiedSeats();
@@ -59,6 +63,11 @@ void loop() {
   buttonHandler(0);
   buttonHandler(1);
   buttonHandler(2);
+  buttonHandler(3);
+  buttonHandler(4);
+  buttonHandler(5);
+  buttonHandler(6);
+  buttonHandler(7);
 }
 
 void resetLeds(CRGB flashColor) {
@@ -94,6 +103,7 @@ void toggleSetupMode() {
     FastLED.show();
   } else {
     resetLeds(colorGreen);
+
     chooseStartPlayer();
   }
 }
@@ -120,6 +130,8 @@ void buttonHandler (int index) {
       unsigned long pressDuration = millis() - buttonPressTime[index];
       if (pressDuration >= LONG_PRESS_TIME && !buttonLongPressTriggered[index]) {
         Serial.println("Long press detected");
+        Serial.print("Button ");
+        Serial.print(index + 1);
         toggleSetupMode();
         buttonLongPressTriggered[index] = true;
       }
@@ -127,6 +139,8 @@ void buttonHandler (int index) {
   } else if (buttonState == LOW && buttonPressed[index]) {
     if (!buttonLongPressTriggered[index]) {
       Serial.println("Short press detected");
+      Serial.print("Button ");
+      Serial.print(index + 1);
       if (setupMode) {
         if (!occupiedSeats[index]) {
           setOccupiedSeat(index, true);
@@ -154,7 +168,8 @@ void chooseStartPlayer () {
   int trueIndices[NUM_SEATS];
   int numTrue = 0;
 
-  for (int i = 0; i < NUM_SEATS; i++) {
+  // Start from the end of the array and move towards the start
+  for (int i = NUM_SEATS - 1; i >= 0; i--) {
     if (occupiedSeats[i]) {
       trueIndices[numTrue] = i;
       numTrue++;
@@ -170,7 +185,6 @@ void chooseStartPlayer () {
   int randomIndex = random(numTrue);
   currentPlayer = trueIndices[randomIndex];
 
-  // *seatLEDs[currentPlayer] = colorGreen;
   trainEffect(seatIndices[currentPlayer]);
   FastLED.show();
 }
@@ -186,7 +200,7 @@ void trainEffect(int restIndex) {
   int totalSteps = random(MIN_LAPS, MAX_LAPS + 1) * NUM_LEDS;
 
   // Calculate the rest position in steps
-  int restPosition = totalSteps + restIndex - TRAIN_LENGTH;
+  int restPosition = totalSteps - restIndex - TRAIN_LENGTH;
 
   // Loop over each step
   for (int i = 0; i <= restPosition; i++) {
@@ -199,7 +213,7 @@ void trainEffect(int restIndex) {
     // Turn on the LEDs in the train
     for (int j = 0; j < TRAIN_LENGTH; j++) {
       if (i - j >= 0) {
-        leds[(i - j) % NUM_LEDS] = colorYellow;
+        leds[(NUM_LEDS - (i - j) % NUM_LEDS) - 1] = colorYellow; // Change here for reverse direction
       }
     }
 
@@ -225,7 +239,7 @@ void goToNextPlayer () {
 
   int loopPlayer = previousPlayer;
   for (int i = 0; i < NUM_SEATS; i++) {
-    int nextPlayer = (loopPlayer + 1) % NUM_SEATS;
+    int nextPlayer = (loopPlayer - 1 + NUM_SEATS) % NUM_SEATS; // Change here for reverse direction
     if (occupiedSeats[nextPlayer]) {
       currentPlayer = nextPlayer;
       break;
@@ -236,15 +250,15 @@ void goToNextPlayer () {
   int startIndex = seatIndices[previousPlayer];
   int endIndex = seatIndices[currentPlayer];
 
-  // If the end index is less than the start index, it means we've wrapped around to the start of the strip
-  if (endIndex < startIndex) {
-    endIndex += NUM_LEDS;
+  // If the end index is greater than the start index, it means we've wrapped around to the start of the strip
+  if (endIndex > startIndex) {
+    startIndex += NUM_LEDS;
   }
 
   // Create the chasing light effect
-  for (int i = startIndex; i < endIndex; i++) {
+  for (int i = startIndex; i > endIndex; i--) { // Change here for reverse direction
     // Turn on the LED at the current index
-    leds[i % NUM_LEDS] = colorYellow;
+    leds[i % NUM_LEDS] = colorGreen;
 
     // Update the LED strip
     FastLED.show();
@@ -253,7 +267,7 @@ void goToNextPlayer () {
     leds[i % NUM_LEDS] = colorBlack;
 
     // Delay to slow down the effect
-    delay(25);
+    delay(10);
   }
 
   // Make sure the LED at the current player's seat is left on
