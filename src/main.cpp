@@ -36,7 +36,7 @@ int currentPlayer = -1;
 unsigned long currentPlayerStartTime = 0;
 
 // Function prototypes
-void toggleSetupMode();
+void toggleSetupMode(int index);
 void setOccupiedSeat(int number, bool value);
 void resetOccupiedSeats();
 void buttonHandler(int index);
@@ -76,11 +76,12 @@ void loop() {
   checkCurrentPlayerTime();
 }
 
-void toggleSetupMode() {
+void toggleSetupMode(int index) {
   setupMode = !setupMode;
 
   bool moreThanOneSeatOccupied = false;
   int occupiedCount = 0;
+
   for (size_t i = 0; i < sizeof(occupiedSeats)/sizeof(occupiedSeats[0]); i++) {
     if (occupiedSeats[i]) {
       occupiedCount++;
@@ -93,9 +94,14 @@ void toggleSetupMode() {
 
   if (setupMode) {
     resetOccupiedSeats();
+
     for (int i = 21; i < NUM_LEDS; i++) {
       leds[i] = colorBlue;
     }
+
+    setOccupiedSeat(index, true);
+    *seatLEDs[index] = colorGreen;
+
     FastLED.show();
   } else if (!moreThanOneSeatOccupied) {
     for (int i = 0; i < NUM_LEDS; i++) {
@@ -129,7 +135,7 @@ void buttonHandler (int index) {
       unsigned long pressDuration = millis() - buttonPressTime[index];
       if (pressDuration >= LONG_PRESS_TIME && !buttonLongPressTriggered[index]) {
         Serial.println("Long press detected");
-        toggleSetupMode();
+        toggleSetupMode(index);
         buttonLongPressTriggered[index] = true;
       }
     }
