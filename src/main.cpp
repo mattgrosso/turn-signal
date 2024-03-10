@@ -7,7 +7,7 @@
 #define NUM_SEATS 8
 #define seat1 30
 #define seat2 52
-#define seat3 75
+#define seat3 74
 #define seat4 96
 #define seat5 119
 #define seat6 142
@@ -32,10 +32,10 @@ static bool buttonLongPressTriggered[NUM_SEATS] = {false};
 // State variables
 bool occupiedSeats[NUM_SEATS] = {false, false, false, false, false, false, false, false};
 bool setupMode = false;
-int currentPlayer;
+int currentPlayer = -1;
+unsigned long currentPlayerStartTime = 0;
 
 // Function prototypes
-void resetLeds(CRGB flashColor);
 void toggleSetupMode();
 void setOccupiedSeat(int number, bool value);
 void resetOccupiedSeats();
@@ -43,7 +43,8 @@ void buttonHandler(int index);
 void chooseStartPlayer();
 void singleLightEffect(int restIndex);
 void allLightsOffEffect(int restIndex);
-void goToNextPlayer ();
+void goToNextPlayer();
+void checkCurrentPlayerTime();
 
 void setup() {
   Serial.begin(9600);
@@ -55,7 +56,10 @@ void setup() {
   colorBlack = CRGB::Black;
   colorBlue = CHSV(170, 255, 128);
 
-  resetLeds(colorBlack);
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = colorBlack;
+    FastLED.show();
+  }
   resetOccupiedSeats();
 }
 
@@ -68,28 +72,8 @@ void loop() {
   buttonHandler(5);
   buttonHandler(6);
   buttonHandler(7);
-}
 
-void resetLeds(CRGB flashColor) {
-  for (int i = 0; i < 2; i++) {
-    for (int i = 21; i < NUM_LEDS; i++) {
-      leds[i] = flashColor;
-    }
-
-    FastLED.show();
-
-    delay(250);
-
-    for (int i = 21; i < NUM_LEDS; i++) {
-      leds[i] = colorBlack;
-    }
-
-    FastLED.show();
-
-    delay(150);
-  }
-
-  delay(500);
+  checkCurrentPlayerTime();
 }
 
 void toggleSetupMode() {
@@ -114,10 +98,11 @@ void toggleSetupMode() {
     }
     FastLED.show();
   } else if (!moreThanOneSeatOccupied) {
-    resetLeds(colorRed);
+    for (int i = 0; i < NUM_LEDS; i++) {
+      leds[i] = colorBlack;
+      FastLED.show();
+    }
   } else {
-    // resetLeds(colorGreen);
-
     chooseStartPlayer();
   }
 }
@@ -189,11 +174,13 @@ void chooseStartPlayer () {
   // If no true values were found, return -1
   if (numTrue == 0) {
     currentPlayer = -1;
+    currentPlayerStartTime = 0;
   }
 
   // Choose a random index from the trueIndices array
   int randomIndex = random(numTrue);
   currentPlayer = trueIndices[randomIndex];
+  currentPlayerStartTime = millis();
 
   int randomChoice = random(0, 2); // Generate a random number (0 or 1)
 
@@ -302,6 +289,18 @@ void allLightsOffEffect(int restIndex) {
 }
 
 void goToNextPlayer () {
+  // Clear out all the LEDs
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = colorBlack;
+  }
+
+  // Light up the LED at the currentPlayer's seat
+  if (currentPlayer >= 21) {
+    *seatLEDs[currentPlayer] = colorGreen;
+  }
+
+  FastLED.show();
+
   int previousPlayer = currentPlayer;
 
   int loopPlayer = previousPlayer;
@@ -309,6 +308,7 @@ void goToNextPlayer () {
     int nextPlayer = (loopPlayer - 1 + NUM_SEATS) % NUM_SEATS;
     if (occupiedSeats[nextPlayer]) {
       currentPlayer = nextPlayer;
+      currentPlayerStartTime = millis();
       break;
     }
     loopPlayer = nextPlayer;
@@ -344,4 +344,45 @@ void goToNextPlayer () {
     *seatLEDs[currentPlayer] = colorGreen;
     FastLED.show();
   }
+}
+
+void checkCurrentPlayerTime() {
+  if (currentPlayer == -1) {
+    return;
+  }
+  
+  unsigned long currentTime = millis();
+  unsigned long timePassed = currentTime - currentPlayerStartTime;
+  int secondsToWait = 60;
+
+  int ledsToLight = timePassed / (secondsToWait * 1000) ; // Number of LEDs to light on either side
+
+  if (ledsToLight > 10) {
+    ledsToLight = 10;
+  }
+
+  // Get the LED index for the currentPlayer
+  int currentPlayerLedIndex = seatIndices[currentPlayer];
+
+  // Calculate the color based on ledsToLight
+  int red = ledsToLight * 25.5; // Goes from 0 to 255 as ledsToLight goes from 0 to 10
+  int green = 255 - red; // Goes from 255 to 0 as ledsToLight goes from 0 to 10
+  CRGB color = CRGB(red, green, 0);
+
+  // Light up the LED at the currentPlayer index
+  if (currentPlayerLedIndex >= 21 && currentPlayerLedIndex < NUM_LEDS) {
+    leds[currentPlayerLedIndex] = color;
+  }
+
+  // Light up ledsToLight LEDs on either side of the currentPlayer
+  for (int i = 1; i <= ledsToLight; i++) {
+    if (currentPlayerLedIndex - i >= 21) {
+      leds[currentPlayerLedIndex - i] = color;
+    }
+    if (currentPlayerLedIndex + i < NUM_LEDS) {
+      leds[currentPlayerLedIndex + i] = color;
+    }
+  }
+
+  FastLED.show();
 }
