@@ -21,6 +21,8 @@ CRGB colorYellow;
 CRGB colorRed;
 CRGB colorBlack;
 CRGB colorBlue;
+CRGB colorOrange;
+CRGB colorPurple;
 
 // Button settings
 const int buttonPins[NUM_SEATS] = {3, 4, 5, 6, 7, 8, 9, 10};
@@ -32,12 +34,15 @@ static bool buttonLongPressTriggered[NUM_SEATS] = {false};
 // State variables
 bool occupiedSeats[NUM_SEATS] = {false, false, false, false, false, false, false, false};
 bool setupMode = false;
+bool allAtOnceMode = false;
+int setupPlayer = -1;
 int currentPlayer = -1;
 unsigned long currentPlayerStartTime = 0;
 
 // Function prototypes
 void toggleSetupMode(int index);
 void setOccupiedSeat(int number, bool value);
+void resetEverything();
 void resetOccupiedSeats();
 void buttonHandler(int index);
 void chooseStartPlayer();
@@ -45,6 +50,7 @@ void singleLightEffect(int restIndex);
 void allLightsOffEffect(int restIndex);
 void goToNextPlayer();
 void checkCurrentPlayerTime();
+void toggleAllAtOnceMode();
 
 void setup() {
   Serial.begin(9600);
@@ -55,12 +61,10 @@ void setup() {
   colorRed = CRGB::Red;
   colorBlack = CRGB::Black;
   colorBlue = CHSV(170, 255, 128);
+  colorOrange = CRGB::Orange;
+  colorPurple = CRGB::Purple;
 
-  for (int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = colorBlack;
-    FastLED.show();
-  }
-  resetOccupiedSeats();
+  resetEverything();
 }
 
 void loop() {
@@ -76,7 +80,21 @@ void loop() {
   checkCurrentPlayerTime();
 }
 
+void resetEverything() {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = colorBlack;
+  }
+  FastLED.show();
+  resetOccupiedSeats();
+  setupMode = false;
+  allAtOnceMode = false;
+  setupPlayer = -1;
+  currentPlayer = -1;
+  currentPlayerStartTime = 0;
+}
+
 void toggleSetupMode(int index) {
+  setupPlayer = index;
   setupMode = !setupMode;
 
   bool moreThanOneSeatOccupied = false;
@@ -93,7 +111,9 @@ void toggleSetupMode(int index) {
   }
 
   if (setupMode) {
-    resetOccupiedSeats();
+    resetEverything();
+    setupMode = true;
+    setupPlayer = index;
 
     for (int i = 21; i < NUM_LEDS; i++) {
       leds[i] = colorBlue;
@@ -111,6 +131,17 @@ void toggleSetupMode(int index) {
   } else {
     chooseStartPlayer();
   }
+}
+
+void toggleAllAtOnceMode() {
+  Serial.println("Toggling all at once mode");
+  allAtOnceMode = !allAtOnceMode;
+  for (size_t i = 0; i < sizeof(occupiedSeats)/sizeof(occupiedSeats[0]); i++) {
+    if (occupiedSeats[i]) {
+      leds[seatIndices[i]] = allAtOnceMode ? colorPurple : colorGreen;
+    }
+  }
+  FastLED.show();
 }
 
 void setOccupiedSeat(int index, bool value) {
@@ -143,9 +174,11 @@ void buttonHandler (int index) {
     if (!buttonLongPressTriggered[index]) {
       Serial.println("Short press detected");
       if (setupMode) {
-        if (!occupiedSeats[index]) {
+        if (index == setupPlayer) {
+          toggleAllAtOnceMode();
+        } else if (!occupiedSeats[index]) {
           setOccupiedSeat(index, true);
-          *seatLEDs[index] = colorGreen;
+          *seatLEDs[index] = allAtOnceMode ? colorPurple : colorGreen;
           FastLED.show();
         } else {
           setOccupiedSeat(index, false);
@@ -154,10 +187,55 @@ void buttonHandler (int index) {
         }
       } else {
         // Normal mode
-        if (index == currentPlayer) {
-          goToNextPlayer();
+        if (allAtOnceMode) {
+          // All at once mode
+          if (occupiedSeats[index]) {
+            // The player's light goes from green to red
+            if (*seatLEDs[index] == colorRed) {
+              *seatLEDs[index] = colorGreen;
+            } else {
+              *seatLEDs[index] = colorRed;
+            }
+            FastLED.show();
+
+            // Check if all players' lights are red
+            bool allRed = true;
+            for (size_t i = 0; i < sizeof(occupiedSeats)/sizeof(occupiedSeats[0]); i++) {
+              if (occupiedSeats[i] && *seatLEDs[i] != colorRed) {
+                allRed = false;
+                break;
+              }
+            }
+
+            // If all players' lights are red, reset them all to green
+            if (allRed) {
+              delay(500);
+              for (int brightness = 0; brightness <= 255; brightness += 5) {
+                for (size_t i = 0; i < sizeof(occupiedSeats)/sizeof(occupiedSeats[0]); i++) {
+                  if (occupiedSeats[i]) {
+                    // Calculate the color based on brightness
+                    int red = 255 - brightness; // Goes from 255 to 0 as brightness goes from 0 to 255
+                    int green = brightness; // Goes from 0 to 255 as brightness goes from 0 to 255
+                    CRGB color = CRGB(red, green, 0);
+
+                    // Set the LED color
+                    *seatLEDs[i] = color;
+                  }
+                }
+                FastLED.show();
+                delay(10); // Delay for the fade effect
+              }
+            }
+          } else {
+            Serial.println("You're not playing!");
+          }
         } else {
-          Serial.println("It's not your turn!");
+          // Turn by turn mode
+          if (index == currentPlayer) {
+            goToNextPlayer();
+          } else {
+            Serial.println("It's not your turn!");
+          }
         }
       }
     }
@@ -166,6 +244,20 @@ void buttonHandler (int index) {
 }
 
 void chooseStartPlayer () {
+  if (allAtOnceMode) {
+    fill_solid(leds, NUM_LEDS, colorBlack);
+    FastLED.show();
+
+    for (size_t i = 0; i < sizeof(occupiedSeats)/sizeof(occupiedSeats[0]); i++) {
+      if (occupiedSeats[i]) {
+        *seatLEDs[i] = colorGreen;
+        FastLED.show();
+        delay(500); // Delay for the lighting up effect
+      }
+    }
+    return;
+  }
+  
   int trueIndices[NUM_SEATS];
   int numTrue = 0;
 
@@ -359,9 +451,10 @@ void checkCurrentPlayerTime() {
   
   unsigned long currentTime = millis();
   unsigned long timePassed = currentTime - currentPlayerStartTime;
-  int secondsToWait = 60;
 
-  int ledsToLight = timePassed / (secondsToWait * 1000) ; // Number of LEDs to light on either side
+  unsigned long secondsToWait = 60;
+
+  int ledsToLight = (unsigned long)timePassed / (secondsToWait * 1000) ; // Number of LEDs to light on either side
 
   if (ledsToLight > 10) {
     ledsToLight = 10;
